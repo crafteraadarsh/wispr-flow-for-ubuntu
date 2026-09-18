@@ -118,8 +118,32 @@ proprietary and subject to its own terms.
 - "Open at login" works via XDG autostart, starts minimized to tray
 - `gnome-extension/`: hides the stray "Status" window from taskbar/Alt-Tab,
   keeps the pill above other windows and pins it 2px above the dock
-  (auto-hide aware). Copy to
-  `~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/`
-  and log out/in.
+  (auto-hide aware). GNOME only; requires Shell 45-52.
+
+### Installing the GNOME extension
+
+Run exactly this (copies the *contents* of `gnome-extension/` into the
+UUID-named folder GNOME expects -- don't `cp -r` the folder itself, that
+nests it one level too deep and the extension won't show up at all):
+
+```sh
+git clone https://github.com/crafteraadarsh/wispr-flow-for-ubuntu.git
+mkdir -p ~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow
+cp wispr-flow-for-ubuntu/gnome-extension/* \
+  ~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/
+```
+
+Then **log out and back in** (required even the first time -- GNOME Shell
+only scans for new extensions at session start, on both X11 and Wayland).
+
+**If it still doesn't appear in the Extensions app:**
+- Check your Shell version matches: `gnome-shell --version`. If it's outside
+  45-52, edit `shell-version` in
+  `~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/metadata.json`
+  to add your version, then log out/in again.
+- Check the folder layout is flat, not nested:
+  `ls ~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/`
+  should list `extension.js` and `metadata.json` directly, not another folder.
+- Check for a load error: `journalctl --user -b 0 | grep -i wispr-flow-window-bridge`
 
 Prebuilt `.deb`: see the Releases page.
