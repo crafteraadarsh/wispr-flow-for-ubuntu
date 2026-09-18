@@ -1,0 +1,20 @@
+{
+  "uuid": "wispr-flow-window-bridge@wispr.flow",
+  "name": "Wispr Flow Window Bridge",
+  "description": "Exports the focused window's identity (app id, title, pid, WM class) and a focus-change signal over D-Bus (org.wispr.flow.WindowBridge) so the Wispr Flow Linux helper can report the active application on GNOME Wayland sessions. Bundled and managed by the helper; safe to disable if Wispr Flow is not installed.",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51",
+    "52"
+  ],
+  "session-modes": [
+    "user",
+    "unlock-dialog"
+  ],
+  "url": "https://wisprflow.ai"
+}
