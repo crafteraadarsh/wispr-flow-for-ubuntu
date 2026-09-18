@@ -9,8 +9,9 @@ name: APT/DNF Repo Heartbeat
 # (before the publish layer is enabled), so this is a no-op until releases ship.
 
 on:
-  schedule:
-    - cron: '0 12 * * *'  # daily noon UTC
+  # schedule disabled in this personal snapshot repo (no APT/DNF/AUR hosting,
+  # and auto-bumping the pinned installer version would build against an
+  # unaudited bundle) -- trigger manually via workflow_dispatch if needed.
   workflow_dispatch:
 
 permissions:

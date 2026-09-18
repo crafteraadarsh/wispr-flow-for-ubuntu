@@ -1,7 +1,8 @@
 name: Update Flake Lock
 on:
-  schedule:
-    - cron: "0 2 * * 1"  # Monday 2 AM UTC
+  # schedule disabled in this personal snapshot repo (no APT/DNF/AUR hosting,
+  # and auto-bumping the pinned installer version would build against an
+  # unaudited bundle) -- trigger manually via workflow_dispatch if needed.
   workflow_dispatch:
 
 permissions:

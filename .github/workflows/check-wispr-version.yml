@@ -10,8 +10,9 @@ name: Check Wispr Flow Version
 # tag-driven workflows).
 
 on:
-  schedule:
-    - cron: "0 1 * * *"
+  # schedule disabled in this personal snapshot repo (no APT/DNF/AUR hosting,
+  # and auto-bumping the pinned installer version would build against an
+  # unaudited bundle) -- trigger manually via workflow_dispatch if needed.
   workflow_dispatch:
 
 permissions:

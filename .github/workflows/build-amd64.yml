@@ -65,7 +65,11 @@ jobs:
 
       - name: Resolve and download Wispr Flow installer
         run: |
-          scripts/setup/resolve-installer-url.sh > resolved.txt
+          # Pinned to 1.6.7: the Linux patches in this fork are anchored on
+          # that release's minified bundle layout and have not been
+          # re-audited against newer upstream releases. Tracking "latest"
+          # here would silently build against an unverified bundle.
+          scripts/setup/resolve-installer-url.sh --version 1.6.7 > resolved.txt
           url=$(grep '^URL=' resolved.txt | cut -d= -f2-)
           [[ -n "$url" ]] || { echo "::error::no installer URL resolved"; exit 1; }
           echo "Downloading installer: $url"
