@@ -172,7 +172,8 @@ jobs:
   update-apt-repo:
     name: Update APT Repository
     needs: [release]
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    # Disabled in this personal snapshot repo: it has no gh-pages APT tree.
+    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -500,7 +501,9 @@ jobs:
   update-aur-repo:
     name: Update AUR Package
     needs: [release]
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    # Disabled in this personal snapshot repo: no AUR package to update, and
+    # its version parsing assumes a bare "vX.Y.Z" tag.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (for PKGBUILD template)
