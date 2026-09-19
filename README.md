@@ -120,30 +120,23 @@ proprietary and subject to its own terms.
   keeps the pill above other windows and pins it 2px above the dock
   (auto-hide aware). GNOME only; requires Shell 45-52.
 
-### Installing the GNOME extension
+### GNOME extension (pill above the dock, no stray "Status" window)
 
-Run exactly this (copies the *contents* of `gnome-extension/` into the
-UUID-named folder GNOME expects -- don't `cp -r` the folder itself, that
-nests it one level too deep and the extension won't show up at all):
+Use the **amd64 `.deb`** from the Releases page. Its bundled helper was rebuilt
+with the patched extension embedded, so the app installs it itself on launch.
+Just launch Wispr Flow once, then **log out and back in** (GNOME loads new
+extension code only at session start).
 
-```sh
-git clone https://github.com/crafteraadarsh/wispr-flow-for-ubuntu.git
-mkdir -p ~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow
-cp wispr-flow-for-ubuntu/gnome-extension/* \
-  ~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/
-```
+Do **not** copy `gnome-extension/` by hand over an install that uses the stock
+helper: the stock helper overwrites it on every launch, and the pill ends up in
+the middle of the screen. The rpm / AppImage / arm64 files on the release use
+the stock helper for that reason. They have the four app fixes only.
 
-Then **log out and back in** (required even the first time -- GNOME Shell
-only scans for new extensions at session start, on both X11 and Wayland).
-
-**If it still doesn't appear in the Extensions app:**
-- Check your Shell version matches: `gnome-shell --version`. If it's outside
-  45-52, edit `shell-version` in
-  `~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/metadata.json`
-  to add your version, then log out/in again.
-- Check the folder layout is flat, not nested:
-  `ls ~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/`
-  should list `extension.js` and `metadata.json` directly, not another folder.
-- Check for a load error: `journalctl --user -b 0 | grep -i wispr-flow-window-bridge`
+If it still misbehaves:
+- `gnome-shell --version` must be in 45-52 (see `shell-version` in
+  `gnome-extension/metadata.json`).
+- `grep -c dashtodockBox ~/.local/share/gnome-shell/extensions/wispr-flow-window-bridge@wispr.flow/extension.js`
+  should print `1`. If it prints `0` you are running a stock-helper build.
+- `journalctl --user -b 0 | grep -i wispr-flow-window-bridge` shows load errors.
 
 Prebuilt `.deb`: see the Releases page.
