@@ -117,8 +117,9 @@ proprietary and subject to its own terms.
 - Language picker positioned correctly (no longer cut off)
 - "Open at login" works via XDG autostart, starts minimized to tray
 - Status pill: only the pill itself is clickable, not the empty window around
-  it (windows underneath keep their hover/clicks), and clicks pass straight
-  through to a fullscreen game instead of minimizing it
+  it, and it never blocks an app: whenever a window is under the pill, clicks
+  there go to that app (incl. fullscreen games, which no longer minimize).
+  With nothing under it the pill is fully interactive.
 - `gnome-extension/`: hides the stray "Status" window from taskbar/Alt-Tab,
   keeps the pill above other windows and pins it 2px above the dock
   (auto-hide aware). GNOME only; requires Shell 45-52.

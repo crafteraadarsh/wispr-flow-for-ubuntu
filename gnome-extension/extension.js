@@ -197,52 +197,101 @@ export default class WindowBridgeExtension extends Extension {
             this._hideIfAuxiliary(a.meta_window)
         );
 
-        // Let clicks through the status pill while a fullscreen app is up.
-        const rescan = () => this._statusWins.forEach(w => this._updateClickThrough(w));
+        // Let clicks through the status pill whenever an app window is under it.
+        this._winWatch = new Map();
+        this._rescan = () =>
+            this._statusWins.forEach(w => this._updateClickThrough(w));
+        global.get_window_actors().forEach(a => this._watchWindow(a.meta_window));
         this._clickThroughSignals = [];
-        for (const [obj, name] of [
-            [global.display, 'in-fullscreen-changed'],
-            [global.display, 'notify::focus-window'],
-            [global.window_manager, 'map'],
-            [global.window_manager, 'destroy'],
-            [global.window_manager, 'minimize'],
-            [global.window_manager, 'unminimize'],
-            [global.window_manager, 'size-changed'],
-            [global.window_manager, 'switch-workspace'],
+        const onMap = (_wm, actor) => {
+            this._watchWindow(actor.meta_window);
+            this._rescan();
+        };
+        for (const [obj, name, fn] of [
+            [global.display, 'notify::focus-window', this._rescan],
+            [global.window_manager, 'map', onMap],
+            [global.window_manager, 'destroy', this._rescan],
+            [global.window_manager, 'minimize', this._rescan],
+            [global.window_manager, 'unminimize', this._rescan],
+            [global.window_manager, 'size-changed', this._rescan],
+            [global.window_manager, 'switch-workspace', this._rescan],
         ])
-            this._clickThroughSignals.push([obj, obj.connect(name, rescan)]);
+            this._clickThroughSignals.push([obj, obj.connect(name, fn)]);
     }
 
-    // While a fullscreen window is showing on the pill's monitor, make the
-    // pill's window click-through so clicks reach that app instead.
+    // A window's own move / resize / workspace / minimize events are not all
+    // surfaced by the window manager, so listen on each window: dragging an app
+    // over the pill must flip it click-through as the window arrives.
+    _watchWindow(w) {
+        if (!w || this._winWatch.has(w))
+            return;
+        const rescan = () => this._rescan();
+        const ids = ['position-changed', 'size-changed', 'workspace-changed',
+            'notify::minimized'].map(n => w.connect(n, rescan));
+        ids.push(w.connect('unmanaged', () => {
+            this._unwatchWindow(w);
+            this._rescan();
+        }));
+        this._winWatch.set(w, ids);
+    }
+
+    _unwatchWindow(w) {
+        for (const id of this._winWatch.get(w) ?? []) {
+            try {
+                w.disconnect(id);
+            } catch (e) {}
+        }
+        this._winWatch.delete(w);
+    }
+
+    // Make the pill's window click-through whenever an app window is under it,
+    // so a click where the pill sits reaches that app instead of the pill.
     //
     // The status window is a real toplevel (Wayland has no input-transparent
-    // overlay for a client to ask for, and its click-through hit test does not
-    // work there), and it is larger than the pill it draws. A click anywhere in
-    // it focuses it, so the fullscreen app loses focus -- and apps that
-    // minimize on focus loss (Wine/Proton games such as Genshin Impact) drop
-    // out of fullscreen. Marking the actor non-reactive removes it from
-    // Clutter's pointer picking, so the pointer lands on the window beneath.
-    // It has to be applied to the window actor AND all its descendants: setting
-    // it on the actor alone leaves the surface actor pickable. (Verified on
-    // GNOME 50 / mutter 18 by picking at the window centre in a headless
-    // shell: window -> actor only: still window -> actor+children: background.)
-    // The hover-only UI (globe button, tooltip) is unavailable meanwhile;
-    // push-to-talk itself is keyboard-driven and unaffected.
+    // overlay for a client to ask for, and Wispr's own click-through hit test
+    // does not work there), so it competes with whatever is underneath: hover
+    // and clicks are swallowed, and over a fullscreen app the click focuses the
+    // pill, the app loses focus, and apps that minimize on focus loss (Wine /
+    // Proton games such as Genshin Impact) drop out of fullscreen. Marking the
+    // actor non-reactive removes it from Clutter's pointer picking, so the
+    // pointer lands on the window beneath. It has to be applied to the window
+    // actor AND all its descendants: setting it on the actor alone leaves the
+    // surface actor pickable. (Verified on GNOME 50 / mutter 18 by picking at
+    // the window centre in a headless shell: window -> actor only: still
+    // window -> actor+children: background.)
+    //
+    // With no app window under it (the pill floating over the bare desktop) it
+    // stays fully interactive. While one is, the pill's hover UI (globe button,
+    // tooltip) is not clickable; push-to-talk itself is keyboard-driven and
+    // unaffected.
 
-    // True if a normal, non-Wispr fullscreen window is visible on `monitor` in
-    // the active workspace.
-    _fullscreenWindowOn(monitor) {
+    // The pill's pointer-pickable box in stage coordinates: the box the
+    // renderer published in the title, else the whole window.
+    _statusBox(win) {
+        const f = win.get_frame_rect();
+        const m = STATUS_TITLE_RE.exec(win.get_title() ?? '');
+        if (m && m[1] !== undefined)
+            return {x: f.x + +m[1], y: f.y + +m[2], w: +m[3], h: +m[4]};
+        return {x: f.x, y: f.y, w: f.width, h: f.height};
+    }
+
+    // True if a normal app window on the active workspace overlaps the pill's
+    // box. The pill is stacked above normal windows, so any overlapping window
+    // is beneath it. Wispr's own auxiliary windows (the pill, context menu) are
+    // hidden from the window list by this extension and so are skipped, while
+    // its Hub / Scratchpad windows count like any other app.
+    _windowBeneath(pill) {
         const ws = global.workspace_manager.get_active_workspace();
+        const box = this._statusBox(pill);
         for (const actor of global.get_window_actors()) {
             const w = actor.meta_window;
-            if (!w || w.window_type !== Meta.WindowType.NORMAL || w.minimized)
+            if (!w || w === pill || w.window_type !== Meta.WindowType.NORMAL)
                 continue;
-            if (w.get_wm_class() === WISPR_WM_CLASS)
+            if (w.minimized || w.is_skip_taskbar() || !w.located_on_workspace(ws))
                 continue;
-            if (w.get_monitor() !== monitor || !w.located_on_workspace(ws))
-                continue;
-            if (w.is_fullscreen())
+            const r = w.get_frame_rect();
+            if (r.x < box.x + box.w && r.x + r.width > box.x &&
+                r.y < box.y + box.h && r.y + r.height > box.y)
                 return true;
         }
         return false;
@@ -253,7 +302,7 @@ export default class WindowBridgeExtension extends Extension {
             const actor = win.get_compositor_private();
             if (!actor)
                 return;
-            const through = this._fullscreenWindowOn(win.get_monitor());
+            const through = this._windowBeneath(win);
             const saved = this._clickThroughSaved.get(win);
             if (through && !saved) {
                 // Remember each actor's own value so we restore exactly what
@@ -294,14 +343,17 @@ export default class WindowBridgeExtension extends Extension {
             const m = STATUS_TITLE_RE.exec(win.get_title() ?? '');
             if (!m || m[1] === undefined) {
                 actor.remove_clip();
-                return;
+            } else {
+                const [x, y, w, h] = m.slice(1).map(Number);
+                // Actor space starts at the buffer origin, which can differ
+                // from the frame origin when the client draws its own
+                // shadow/borders.
+                const f = win.get_frame_rect();
+                const b = win.get_buffer_rect();
+                actor.set_clip(x + (f.x - b.x), y + (f.y - b.y), w, h);
             }
-            const [x, y, w, h] = m.slice(1).map(Number);
-            // Actor space starts at the buffer origin, which can differ from
-            // the frame origin when the client draws its own shadow/borders.
-            const f = win.get_frame_rect();
-            const b = win.get_buffer_rect();
-            actor.set_clip(x + (f.x - b.x), y + (f.y - b.y), w, h);
+            // The pill's box changed, so what overlaps it may have too.
+            this._updateClickThrough(win);
         } catch (e) {
             // Window can vanish mid-call; nothing to clean up either way.
         }
@@ -491,6 +543,8 @@ export default class WindowBridgeExtension extends Extension {
         for (const [obj, id] of this._clickThroughSignals ?? [])
             obj.disconnect(id);
         this._clickThroughSignals = [];
+        for (const w of [...(this._winWatch?.keys() ?? [])])
+            this._unwatchWindow(w);
         this._statusWins?.forEach(w => {
             this._restoreClickThrough(w);
             try {
