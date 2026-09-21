@@ -148,6 +148,10 @@ function dockHeight() {
 
 export default class WindowBridgeExtension extends Extension {
     enable() {
+        // Must exist before the sweep below wires an already-open status pill.
+        this._statusWins = new Set();
+        this._clickThroughSaved = new WeakMap();
+
         this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(IFACE_XML, this);
         this._dbusImpl.export(Gio.DBus.session, OBJECT_PATH);
         this._ownerId = Gio.bus_own_name_on_connection(
@@ -184,6 +188,97 @@ export default class WindowBridgeExtension extends Extension {
         global.get_window_actors().forEach(a =>
             this._hideIfAuxiliary(a.meta_window)
         );
+
+        // Let clicks through the status pill while a fullscreen app is up.
+        const rescan = () => this._statusWins.forEach(w => this._updateClickThrough(w));
+        this._clickThroughSignals = [];
+        for (const [obj, name] of [
+            [global.display, 'in-fullscreen-changed'],
+            [global.display, 'notify::focus-window'],
+            [global.window_manager, 'map'],
+            [global.window_manager, 'destroy'],
+            [global.window_manager, 'minimize'],
+            [global.window_manager, 'unminimize'],
+            [global.window_manager, 'size-changed'],
+            [global.window_manager, 'switch-workspace'],
+        ])
+            this._clickThroughSignals.push([obj, obj.connect(name, rescan)]);
+    }
+
+    // While a fullscreen window is showing on the pill's monitor, make the
+    // pill's window click-through so clicks reach that app instead.
+    //
+    // The status window is a real toplevel (Wayland has no input-transparent
+    // overlay for a client to ask for, and its click-through hit test does not
+    // work there), and it is larger than the pill it draws. A click anywhere in
+    // it focuses it, so the fullscreen app loses focus -- and apps that
+    // minimize on focus loss (Wine/Proton games such as Genshin Impact) drop
+    // out of fullscreen. Marking the actor non-reactive removes it from
+    // Clutter's pointer picking, so the pointer lands on the window beneath.
+    // It has to be applied to the window actor AND all its descendants: setting
+    // it on the actor alone leaves the surface actor pickable. (Verified on
+    // GNOME 50 / mutter 18 by picking at the window centre in a headless
+    // shell: window -> actor only: still window -> actor+children: background.)
+    // The hover-only UI (globe button, tooltip) is unavailable meanwhile;
+    // push-to-talk itself is keyboard-driven and unaffected.
+
+    // True if a normal, non-Wispr fullscreen window is visible on `monitor` in
+    // the active workspace.
+    _fullscreenWindowOn(monitor) {
+        const ws = global.workspace_manager.get_active_workspace();
+        for (const actor of global.get_window_actors()) {
+            const w = actor.meta_window;
+            if (!w || w.window_type !== Meta.WindowType.NORMAL || w.minimized)
+                continue;
+            if (w.get_wm_class() === WISPR_WM_CLASS)
+                continue;
+            if (w.get_monitor() !== monitor || !w.located_on_workspace(ws))
+                continue;
+            if (w.is_fullscreen())
+                return true;
+        }
+        return false;
+    }
+
+    _updateClickThrough(win) {
+        try {
+            const actor = win.get_compositor_private();
+            if (!actor)
+                return;
+            const through = this._fullscreenWindowOn(win.get_monitor());
+            const saved = this._clickThroughSaved.get(win);
+            if (through && !saved) {
+                // Remember each actor's own value so we restore exactly what
+                // Mutter set (some children, e.g. shadows, are never reactive).
+                const state = new Map();
+                const walk = a => {
+                    state.set(a, a.reactive);
+                    a.reactive = false;
+                    for (const c of a.get_children())
+                        walk(c);
+                };
+                walk(actor);
+                this._clickThroughSaved.set(win, state);
+            } else if (!through && saved) {
+                this._restoreClickThrough(win);
+            }
+        } catch (e) {
+            // Window can vanish mid-call; nothing to clean up either way.
+        }
+    }
+
+    _restoreClickThrough(win) {
+        const state = this._clickThroughSaved?.get(win);
+        if (!state)
+            return;
+        this._clickThroughSaved.delete(win);
+        for (const [actor, reactive] of state) {
+            try {
+                actor.reactive = reactive;
+            } catch (e) {
+                // Actor destroyed since we recorded it.
+            }
+        }
     }
 
     // Excludes win from the taskbar/Alt-Tab/Overview switcher if it is one of
@@ -303,6 +398,13 @@ export default class WindowBridgeExtension extends Extension {
                 win.connect('size-changed', () =>
                     this._pinStatusBottomCenter(win)
                 );
+                this._statusWins.add(win);
+                win.connect('unmanaged', () => this._statusWins.delete(win));
+                // Re-evaluate if the pill lands on a different monitor.
+                win.connect('position-changed', () =>
+                    this._updateClickThrough(win)
+                );
+                this._updateClickThrough(win);
             }
         } catch (e) {
             // Window can vanish mid-call (closed while we're inspecting it);
@@ -343,6 +445,11 @@ export default class WindowBridgeExtension extends Extension {
             global.display.disconnect(this._focusChangedId);
             this._focusChangedId = 0;
         }
+        for (const [obj, id] of this._clickThroughSignals ?? [])
+            obj.disconnect(id);
+        this._clickThroughSignals = [];
+        this._statusWins?.forEach(w => this._restoreClickThrough(w));
+        this._statusWins?.clear();
         this._disconnectTitle();
         this._focusWindow = null;
 
