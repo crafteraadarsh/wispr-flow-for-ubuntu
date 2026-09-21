@@ -6,7 +6,7 @@
 # (the .asar stores the JS bundle as concatenated plaintext, so a byte-grep
 # finds the markers without unpacking).
 #
-# verify-patches.sh greps a fixed set of markers (12 fixed strings + 1 Perl
+# verify-patches.sh greps a fixed set of markers (13 fixed strings + 1 Perl
 # regex). We build a tiny fixture carrying those exact marker strings (PASS)
 # and per-marker fixtures that omit one (FAIL).
 #
@@ -41,6 +41,7 @@ declare -gA MARKER_SAMPLES=(
 	[statuscompact]='return(/*WISPR_LINUX_STATUS_COMPACT*/"linux"===process.platform)?{x:0}:{x:1}'
 	[screenpos]='(/*WISPR_LINUX_SCREENPOS*/"linux"===window.electron?.platform?.os?0:window.screenX)'
 	[autostart]='/*WISPR_LINUX_AUTOSTART*/if("linux"===process.platform){}'
+	[statusshape]='/*WISPR_LINUX_STATUS_SHAPE*/(function(){document.title="Status|0,0,1,1"})();'
 )
 
 # Write a fixture app.asar-like file containing every marker, except the one
@@ -185,6 +186,14 @@ write_fixture() {
 @test "verify: exits 1 when the autostart marker is missing" {
 	local fixture
 	fixture="$(write_fixture autostart)"
+	run "$VERIFY_SH" "$fixture"
+	[[ "$status" -eq 1 ]]
+	[[ "$output" == *'MISSING'* ]]
+}
+
+@test "verify: exits 1 when the status-shape marker is missing" {
+	local fixture
+	fixture="$(write_fixture statusshape)"
 	run "$VERIFY_SH" "$fixture"
 	[[ "$status" -eq 1 ]]
 	[[ "$output" == *'MISSING'* ]]

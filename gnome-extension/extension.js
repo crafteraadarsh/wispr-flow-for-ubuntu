@@ -146,6 +146,14 @@ function dockHeight() {
     return Math.round(found);
 }
 
+// The status renderer publishes the pill's painted bounding box in its title
+// as "Status|x,y,w,h" (see the linux-status-shape patch in the app repo).
+const STATUS_TITLE_RE = /^Status(?:\|(-?\d+),(-?\d+),(\d+),(\d+))?$/;
+
+function isStatusTitle(title) {
+    return STATUS_TITLE_RE.test(title ?? '');
+}
+
 export default class WindowBridgeExtension extends Extension {
     enable() {
         // Must exist before the sweep below wires an already-open status pill.
@@ -262,6 +270,38 @@ export default class WindowBridgeExtension extends Extension {
             } else if (!through && saved) {
                 this._restoreClickThrough(win);
             }
+        } catch (e) {
+            // Window can vanish mid-call; nothing to clean up either way.
+        }
+    }
+
+    // Restrict the pill window's painted AND pointer-pickable area to the pill.
+    //
+    // The status window is larger than the pill it draws, and a Wayland client
+    // cannot shape its own input area (Electron's setShape is a no-op there),
+    // so without this the empty part of the window swallows hover and clicks
+    // meant for whatever is underneath. Clutter's actor clip applies to
+    // picking as well as painting, so clipping the window actor to the pill's
+    // box makes everything outside it fall through to the window below.
+    // (Verified on GNOME 50 / mutter 18: inside the clip the pointer hits the
+    // window, outside it hits what is beneath, removing the clip restores it.)
+    // No published box (unpatched app, or title not yet set) -> no clip.
+    _applyStatusShape(win) {
+        try {
+            const actor = win.get_compositor_private();
+            if (!actor)
+                return;
+            const m = STATUS_TITLE_RE.exec(win.get_title() ?? '');
+            if (!m || m[1] === undefined) {
+                actor.remove_clip();
+                return;
+            }
+            const [x, y, w, h] = m.slice(1).map(Number);
+            // Actor space starts at the buffer origin, which can differ from
+            // the frame origin when the client draws its own shadow/borders.
+            const f = win.get_frame_rect();
+            const b = win.get_buffer_rect();
+            actor.set_clip(x + (f.x - b.x), y + (f.y - b.y), w, h);
         } catch (e) {
             // Window can vanish mid-call; nothing to clean up either way.
         }
@@ -388,7 +428,7 @@ export default class WindowBridgeExtension extends Extension {
                 win.connect('position-changed', pin);
                 win.connect('size-changed', pin);
             }
-            if (win.get_title() === 'Status' && !this._statusWired?.has(win)) {
+            if (isStatusTitle(win.get_title()) && !this._statusWired?.has(win)) {
                 this._statusWired ??= new WeakSet();
                 this._statusWired.add(win);
                 this._pinStatusBottomCenter(win);
@@ -405,6 +445,9 @@ export default class WindowBridgeExtension extends Extension {
                     this._updateClickThrough(win)
                 );
                 this._updateClickThrough(win);
+                // The renderer publishes the pill's painted box in the title.
+                win.connect('notify::title', () => this._applyStatusShape(win));
+                this._applyStatusShape(win);
             }
         } catch (e) {
             // Window can vanish mid-call (closed while we're inspecting it);
@@ -448,7 +491,12 @@ export default class WindowBridgeExtension extends Extension {
         for (const [obj, id] of this._clickThroughSignals ?? [])
             obj.disconnect(id);
         this._clickThroughSignals = [];
-        this._statusWins?.forEach(w => this._restoreClickThrough(w));
+        this._statusWins?.forEach(w => {
+            this._restoreClickThrough(w);
+            try {
+                w.get_compositor_private()?.remove_clip();
+            } catch (e) {}
+        });
         this._statusWins?.clear();
         this._disconnectTitle();
         this._focusWindow = null;

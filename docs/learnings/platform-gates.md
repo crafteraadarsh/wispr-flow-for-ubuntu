@@ -153,6 +153,7 @@ backup, `node --check`s the result, and is idempotent (re-run = byte-identical).
 | Fresh installs seeded macOS `fn`/⌘ shortcut defaults + skipped the onboarding Permissions step → widen each renderer's `isWindows` **bind** to also be true on linux (bridge stays honest) | [`linux-renderer-treat-as-windows.sh`](../../scripts/patches/linux-renderer-treat-as-windows.sh) | `WISPR_LINUX_RENDERER_ISWIN` |
 | Cold-start `wispr-flow:` deep links dropped (parse was win32-only) → widen the argv-parse guard | [`linux-deeplink.sh`](../../scripts/patches/linux-deeplink.sh) | `WISPR_LINUX_DEEPLINK` |
 | Status-pill drag-to-reposition can never complete (client-side absolute window positioning has no native-Wayland equivalent) and strands an input-blocking dimming overlay over part of the screen → force the drag-overlay activation flag false on Linux | [`linux-disable-pill-drag.sh`](../../scripts/patches/linux-disable-pill-drag.sh) | `WISPR_LINUX_DISABLE_PILL_DRAG` |
+| The status pill's window is far larger than the pill and, with no click-through on native Wayland, blocks hover/clicks on the window beneath → publish the pill's painted box in `document.title` for the compositor-side extension to clip to ([details](wayland-status-pill-input.md)) | [`linux-status-shape.sh`](../../scripts/patches/linux-status-shape.sh) | `WISPR_LINUX_STATUS_SHAPE` |
 
 `linux-renderer-treat-as-windows.sh` is the high-leverage one: per renderer it
 widens the *one* place `isWindows` is bound into a module-local

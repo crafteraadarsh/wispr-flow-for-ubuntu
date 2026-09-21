@@ -309,6 +309,11 @@ step3_patch_bundle() {
       auto "Running linux-status-screenpos.sh on $status_renderer"
       bash "$SCRIPT_DIR/patches/linux-status-screenpos.sh" "$status_renderer" \
         || warn "Status screen-position patch failed -- see output above."
+      # Publish the pill's painted box so the GNOME extension can shape the
+      # window's input area (the transparent margin blocks clicks otherwise).
+      auto "Running linux-status-shape.sh on $status_renderer"
+      bash "$SCRIPT_DIR/patches/linux-status-shape.sh" "$status_renderer" \
+        || warn "Status shape patch failed -- see output above."
     fi
     local hub_renderer="$webpack_root/renderer/hub/index.js"
     if [[ -f "$hub_renderer" ]]; then

@@ -17,6 +17,8 @@
 #     * linux-autostart.sh     -> XDG autostart for Open at login, starts hidden
 #   renderer bundles:
 #     * linux-status-screenpos.sh -> real pill screen position on Linux
+#     * linux-status-shape.sh -> pill's painted box published in the title, so
+#       the compositor-side extension can shape the window's input area
 #     * linux-renderer-chrome.sh -> remaps the <html> platform class linux->win32
 #     * linux-renderer-treat-as-windows.sh -> widens each renderer's isWindows
 #       bind so its consumers take the Windows branch on Linux (the bridge's
@@ -56,6 +58,7 @@ MARKERS=(
   "disable-pill-drag: linux drag-overlay activation forced false|F|WISPR_LINUX_DISABLE_PILL_DRAG"
   "status-compact: linux status window shrunk to pill size|F|WISPR_LINUX_STATUS_COMPACT"
   "status-screenpos: linux status renderer real screen position|F|WISPR_LINUX_SCREENPOS"
+  "status-shape: linux status renderer publishes the pill's painted box|F|WISPR_LINUX_STATUS_SHAPE"
   "autostart: linux login-item shim|F|WISPR_LINUX_AUTOSTART"
 )
 
