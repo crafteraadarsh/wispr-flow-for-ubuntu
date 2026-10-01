@@ -112,6 +112,9 @@ proprietary and subject to its own terms.
 
 ## Fixes in this fork
 
+- Dictation auto-paste on GNOME: fixed a race where the synthesized Ctrl+V
+  landed as a bare 'v' (or nothing) because Mutter hadn't yet observed the
+  physical push-to-talk modifier release
 - Status pill: drag disabled on Linux (Wayland can't move client windows)
 - Status window shrunk to the pill (no invisible click-blocking box)
 - Language picker positioned correctly (no longer cut off)
